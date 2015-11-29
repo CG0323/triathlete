@@ -26,37 +26,86 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 
 app.get('/', function (req, res, next) {
-  // 用 superagent 去抓取 https://cnodejs.org/ 的内容
+  var matches = [];
+  var event_validation = {};
+  var view_state = {};
   superagent.get('http://triathlon.basts.com.cn/ViewResult.aspx')
+    .set('Connection','keep-alive')
     .end(function (err, sres) {
-      // 常规的错误处理
+
       if (err) {
         return next(err);
       }
-      // sres.text 里面存储着网页的 html 内容，将它传给 cheerio.load 之后
-      // 就可以得到一个实现了 jquery 接口的变量，我们习惯性地将它命名为 `$`
-      // 剩下就都是 jquery 的内容了
+     
+      
       var $ = cheerio.load(sres.text);
-      var items = [];
-      var i = 0;
-      $('.gridview_m tr').each(function (idx, element) {
-        if(i != 0)
-        {
-          var $element = $(element);
-          items.push({
-          title: $element.children().eq(0).text(),
-          date: $element.children().eq(1).text()
-          });
-        }
-        i++;
-        
-        
-        
+      view_state = $('#__VIEWSTATE').attr('value');
+      event_validation = $('#__EVENTVALIDATION').attr('value');
+      //console.log(sres.headers);
+      // first get the matches of current year
+      matches = getMatchList($);
+
+      var previousYears = getYearList($);
+      previousYears.forEach(function(year){
+      appendMatchListOnYear(year, matches, view_state, event_validation);
+        //console.log(html);
+        //$ = cheerio.load(html);
+       // matches.push(getMatchList($));
       });
 
-      res.send(items);
+
+      res.send(matches);
     });
+
 });
 
+function appendMatchListOnYear(year, matches, view_states, event_validation){
+
+  var request = superagent.post('http://triathlon.basts.com.cn/ViewResult.aspx')
+    .type('form')
+    .set('Connection', 'keep-alive')
+    .set('User-Agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.152 Safari/537.36')
+    .send({ToolkitScriptManager1:'UpdatePanel1|DRDYearList'})
+    .send({DRDYearList:year})
+    .send({__EVENTTARGET:'DRDYearList'})
+    .send({__VIEWSTATE: view_states})
+    .send({__EVENTVALIDATION: event_validation})
+    .send({__VIEWSTATEENCRYPTED:''})
+    .send({__ASYNCPOST:'true'})
+    request.end(function (err, tres){
+      if (err) {
+        return;
+      }
+      var tmp = getMatchList(cheerio.load(tres.text));
+      matches.push(tmp);
+    });
+  
+};
+
+function getYearList($) {
+  var yearList = [];
+  $("#DRDYearList option[selected!='selected']").each(function (idx, element) {
+    var $element = $(element);
+    yearList.push($element.attr('value'));
+  });
+  return yearList;
+};
+
+function getMatchList($) {
+  var matches = [];
+  var i = 0;
+  $('.gridview_m tr').each(function (idx, element) {
+    if (i != 0) {
+      var $element = $(element);
+      matches.push({
+        game: $element.children().eq(0).text(),
+        date: $element.children().eq(1).text(),
+        result_id: $element.children().last().children().first().attr('id')
+      });
+    }
+    i++;
+  });
+  return matches;
+};
 
 module.exports = app;
