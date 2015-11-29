@@ -6,6 +6,7 @@ var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var superagent = require('superagent');
 var cheerio = require('cheerio');
+var Q = require('q');
 
 var routes = require('./routes/index');
 var users = require('./routes/users');
@@ -27,40 +28,39 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', function (req, res, next) {
   var matches = [];
-  var event_validation = {};
-  var view_state = {};
+  var param = {};
   superagent.get('http://triathlon.basts.com.cn/ViewResult.aspx')
     .set('Connection','keep-alive')
     .end(function (err, sres) {
-
       if (err) {
         return next(err);
       }
-     
-      
+         
       var $ = cheerio.load(sres.text);
-      view_state = $('#__VIEWSTATE').attr('value');
-      event_validation = $('#__EVENTVALIDATION').attr('value');
-      //console.log(sres.headers);
+      param.view_state = $('#__VIEWSTATE').attr('value');
+      param.event_validation = $('#__EVENTVALIDATION').attr('value');
       // first get the matches of current year
       matches = getMatchList($);
-
       var previousYears = getYearList($);
+
+      var matchPromise = [];
       previousYears.forEach(function(year){
-      appendMatchListOnYear(year, matches, view_state, event_validation);
-        //console.log(html);
-        //$ = cheerio.load(html);
-       // matches.push(getMatchList($));
+        matchPromise.push(getMatchListOnYear(year, param));
       });
-
-
-      res.send(matches);
+      Q.all(matchPromise).then(function(data){
+        data.forEach(function(matchOnYear){
+          matches = matches.concat(matchOnYear);  
+        });
+        res.send(matches);
+        
+      });
     });
 
 });
 
-function appendMatchListOnYear(year, matches, view_states, event_validation){
 
+ function getMatchListOnYear(year, param){
+  var deferred = Q.defer();
   var request = superagent.post('http://triathlon.basts.com.cn/ViewResult.aspx')
     .type('form')
     .set('Connection', 'keep-alive')
@@ -68,18 +68,21 @@ function appendMatchListOnYear(year, matches, view_states, event_validation){
     .send({ToolkitScriptManager1:'UpdatePanel1|DRDYearList'})
     .send({DRDYearList:year})
     .send({__EVENTTARGET:'DRDYearList'})
-    .send({__VIEWSTATE: view_states})
-    .send({__EVENTVALIDATION: event_validation})
+    .send({__VIEWSTATE: param.view_state})
+    .send({__EVENTVALIDATION: param.event_validation})
     .send({__VIEWSTATEENCRYPTED:''})
     .send({__ASYNCPOST:'true'})
     request.end(function (err, tres){
       if (err) {
-        return;
+        deferred.reject(err);
       }
-      var tmp = getMatchList(cheerio.load(tres.text));
-      matches.push(tmp);
+      else
+      {  
+        var matches = getMatchList(cheerio.load(tres.text));
+        deferred.resolve(matches);
+      }
     });
-  
+  return deferred.promise;
 };
 
 function getYearList($) {
@@ -97,11 +100,15 @@ function getMatchList($) {
   $('.gridview_m tr').each(function (idx, element) {
     if (i != 0) {
       var $element = $(element);
-      matches.push({
-        game: $element.children().eq(0).text(),
-        date: $element.children().eq(1).text(),
-        result_id: $element.children().last().children().first().attr('id')
-      });
+      var gameName = $element.children().eq(0).text();
+      if(gameName.indexOf("专业组") < 0)
+      {
+        matches.push({
+          game: $element.children().eq(0).text(),
+          date: $element.children().eq(1).text(),
+          result_id: $element.children().last().children().first().attr('id')
+        });
+      }
     }
     i++;
   });
