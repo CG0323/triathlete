@@ -26,38 +26,268 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 
-app.get('/', function (req, res, next) {
-  var matches = [];
+app.get('/', function (req, res, next) { 
   var param = {};
+  getMatchOnCurrentYear()
+    .then(function (data) {
+      var matches = data.matches;
+      var previousYears = data.previous_years;
+      param = data.param;
+      var matchPromises = [];
+      previousYears.forEach(function (year) {
+        matchPromises.push(getMatchListOnYear(year, param));
+      });
+      Q.all(matchPromises).then(function (datas) {
+        datas.forEach(function (data) {
+          matches = matches.concat(data.matches);
+        });
+        return {matches: matches, param: data.param};
+      })
+     .then(function(data){  
+       getMatchesWithResults(data.matches, data.param)
+       .then(function(matchesWithResult){
+         res.send(matchesWithResult)
+       })
+     })
+  })
+
+});
+
+function getMatchesWithResults(matches, param){
+  var deferred = Q.defer();
+  var promises = [];
+  getMatchWithResults(matches[1], param)
+  .then(function(data){deferred.resolve(data);})
+  // matches.forEach(function(match){
+  //   promises.push(getMatchWithResults(match, param))
+  // })
+  // Q.all(promises)
+  //   .then(function(matchesWithResult){
+  //     deferred.resolve(matchesWithResult);
+  //   })
+  return deferred.promise;
+};
+
+function getMatchWithResults(match, param){
+  var deferred = Q.defer();
+  getMatchGroupList(match, param)
+    .then(populateGroupWithResults)
+    .then(function(groups){
+      match.groups = groups;
+      console.log(match);
+      deferred.resolve(match);
+    })
+  return deferred.promise;
+};
+
+function getMatchGroupList(match, param)
+{
+  var deferred = Q.defer();
+  var date = new Date(match.date);
+  var year = date.getFullYear();
+  var target = 'UpdatePanel1|' + match.result_id;
+  var request = superagent.post('http://triathlon.basts.com.cn/ViewResult.aspx')
+    .type('form')
+    .set('Connection', 'keep-alive')
+    .set('User-Agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.152 Safari/537.36')
+    .send({ToolkitScriptManager1:target})
+    .send({DRDYearList:year})
+    .send({__EVENTTARGET:match.result_id})
+    .send({__VIEWSTATE: param.view_state})
+    .send({__EVENTVALIDATION: param.event_validation})
+    .send({__VIEWSTATEENCRYPTED:''})
+    .send({__ASYNCPOST:'true'})
+    
+    request.end(function (err, tres){
+      if (err) {
+        deferred.reject(err);
+      }
+      else
+      { var groups = []; 
+        var $ = cheerio.load(tres.text);
+        $("#DRDSub2 option").each(function (idx, element) {
+          var $element = $(element);
+          if($element.text().indexOf("团体") == -1 && $element.text().indexOf("接力") == -1 &&  $element.text().indexOf("两项") == -1)
+          {
+            groups.push({value:$element.attr('value'), name:$element.text()});   
+          }
+        });
+        if(groups.length > 0)
+        {
+          var param1 = {};
+          param1.view_state = parseViewStateFromHTML(tres.text);
+          param1.event_validation = parseEventValidationFromHTML(tres.text);
+          deferred.resolve({groupList:groups, param:param1});       
+        }
+        else
+        {
+          deferred.reject("empty group");
+        }
+      }
+    });
+  return deferred.promise;
+}
+
+function parseViewStateFromHTML(text)
+{
+  var pattern = new RegExp("__VIEWSTATE\\|[^\\|]*(?=\\|)");
+  var tmp = pattern.exec(text);
+  var result = tmp[0].replace("__VIEWSTATE|", "");
+  return result;
+}
+
+function parseEventValidationFromHTML(text)
+{
+  var pattern = new RegExp("__EVENTVALIDATION\\|[^\\|]*(?=\\|)");
+  var result = pattern.exec(text)[0].replace("__EVENTVALIDATION|", "");
+  return result;
+}
+
+
+function populateGroupWithResults(config)
+{
+  var deferred = Q.defer();
+  var groupList = config.groupList;
+  var param = config.param;
+  var subGroupPromisies = [];
+  groupList.forEach(function(group){
+    subGroupPromisies.push(populateSubGroup(group, param));
+  });
+  Q.all(subGroupPromisies)
+    .then(function(groups){
+      deferred.resolve(groups);
+    })
+  return deferred.promise;
+}
+
+function populateSubGroup(group, param)
+{
+  var deferred = Q.defer();
+  var groupID = group.value;
+  var request = superagent.post('http://triathlon.basts.com.cn/ViewResult.aspx')
+    .type('form')
+    .set('Connection', 'keep-alive')
+    .set('User-Agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.152 Safari/537.36')
+    .send({ToolkitScriptManager1:'UpdatePanel1|DRDSub2'})
+    .send({DRDType:0})
+    .send({DRDSub2:groupID})
+    .send({DRDSubGroup2:'1472'})
+    .send({__EVENTTARGET:'DRDSub2'})
+    .send({__VIEWSTATE: param.view_state})
+    .send({__EVENTVALIDATION: param.event_validation})
+    .send({__VIEWSTATEENCRYPTED:''})
+    .send({__ASYNCPOST:'true'})
+    request.end(function (err, tres){
+      if (err) {
+        deferred.reject(err);
+      }
+      else
+      { var subGroups = []; 
+        var $ = cheerio.load(tres.text);
+        $("#DRDSubGroup2 option").each(function (idx, element) {
+          var $element = $(element);
+          subGroups.push({value:$element.attr('value'), name:$element.text()});   
+        });
+        var subGroupResultPromises = [];
+        subGroups.forEach(function(subGroup){
+          subGroupResultPromises.push(getSubGroupResult(group, subGroup, param));
+        })
+        Q.all(subGroupResultPromises)
+          .then(function(subGroups){
+            group.sub_groups = subGroups;
+            deferred.resolve(group);       
+          })
+      }
+    });
+  return deferred.promise;
+}
+
+function getSubGroupResult(group, subGroup, param)
+{
+  var deferred = Q.defer();
+  var groupID = group.value;
+  var subGroupID = subGroup.value;
+
+  var request = superagent.post('http://triathlon.basts.com.cn/ViewResult.aspx')
+    .type('form')
+    .set('Connection', 'keep-alive')
+    .set('User-Agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.152 Safari/537.36')
+    .send({ToolkitScriptManager1:'UpdatePanel1|DRDSubGroup2'})
+    .send({DRDType:0})
+    .send({DRDSub2:groupID})
+    .send({DRDSubGroup2:subGroupID})
+    .send({__EVENTTARGET:'DRDSubGroup2'})
+    .send({__VIEWSTATE: param.view_state})
+    .send({__EVENTVALIDATION: param.event_validation})
+    .send({__VIEWSTATEENCRYPTED:''})
+    .send({__ASYNCPOST:'true'})
+    request.end(function (err, tres){
+      if (err) {
+        deferred.reject(err);
+      }
+      else
+      { 
+        var $ = cheerio.load(tres.text);
+        subGroup.results= getResultList($);
+        deferred.resolve(subGroup);       
+      }
+    });
+  return deferred.promise;
+}
+
+function getResultList($) {
+  var results = [];
+  var i = 0;
+  $('.gridview_m tr').each(function (idx, element) {
+    if (i != 0) {
+      var $element = $(element);
+      var club = $element.children().eq(3).text();
+      if(club.indexOf("北京第三连") >= 0)
+      {
+        results.push({
+          rank: $element.children().eq(0).text(),
+          bib: $element.children().eq(1).text(),
+          athlete: $element.children().eq(2).text(),
+          club: club,
+          swim: $element.children().eq(4).text(),
+          t1: $element.children().eq(5).text(),
+          cycling: $element.children().eq(6).text(),
+          t2: $element.children().eq(7).text(),
+          run: $element.children().eq(8).text(),
+          total: $element.children().eq(9).text()
+        });
+      }
+    }
+    i++;
+  });
+  return results;
+};
+
+function getMatchOnCurrentYear(){
+  var deferred = Q.defer();
   superagent.get('http://triathlon.basts.com.cn/ViewResult.aspx')
     .set('Connection','keep-alive')
     .end(function (err, sres) {
       if (err) {
-        return next(err);
+        deferred.reject(err);
       }
-         
-      var $ = cheerio.load(sres.text);
-      param.view_state = $('#__VIEWSTATE').attr('value');
-      param.event_validation = $('#__EVENTVALIDATION').attr('value');
-      // first get the matches of current year
-      matches = getMatchList($);
-      var previousYears = getYearList($);
-
-      var matchPromise = [];
-      previousYears.forEach(function(year){
-        matchPromise.push(getMatchListOnYear(year, param));
-      });
-      Q.all(matchPromise).then(function(data){
-        data.forEach(function(matchOnYear){
-          matches = matches.concat(matchOnYear);  
-        });
-        res.send(matches);
-        
-      });
+      else
+      {
+        var $ = cheerio.load(sres.text);
+        var param = {}
+        param.view_state = $('#__VIEWSTATE').attr('value');
+        param.event_validation = $('#__EVENTVALIDATION').attr('value');
+        var matches = getMatchList($);
+        var previousYears = getYearList($);
+        var data = {
+          matches: matches, 
+          previous_years:previousYears,
+          param: param};
+        deferred.resolve(data);
+      }
     });
-
-});
-
+    return deferred.promise;
+}
 
  function getMatchListOnYear(year, param){
   var deferred = Q.defer();
@@ -78,8 +308,10 @@ app.get('/', function (req, res, next) {
       }
       else
       {  
-        var matches = getMatchList(cheerio.load(tres.text));
-        deferred.resolve(matches);
+        var $ = cheerio.load(tres.text);
+        var matches = getMatchList($);
+        var data = {matches: matches, param: param};
+        deferred.resolve(data);
       }
     });
   return deferred.promise;
@@ -106,7 +338,7 @@ function getMatchList($) {
         matches.push({
           game: $element.children().eq(0).text(),
           date: $element.children().eq(1).text(),
-          result_id: $element.children().last().children().first().attr('id')
+          result_id: $element.children().last().children().first().attr('id').replace(/_/g,"$")
         });
       }
     }
