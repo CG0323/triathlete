@@ -7,6 +7,7 @@ var bodyParser = require('body-parser');
 var superagent = require('superagent');
 var cheerio = require('cheerio');
 var Q = require('q');
+var fs = require('fs');
 
 var routes = require('./routes/index');
 var users = require('./routes/users');
@@ -27,6 +28,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 
 app.get('/', function (req, res, next) { 
+  var existingMatchFiles = fs.readdirSync("./data");
+  var existingMatches = [];
+  existingMatchFiles.forEach(function(filename){
+    var matchName = filename.replace(".json","");
+    existingMatches.push(matchName);
+  });
   var param = {};
   getMatchOnCurrentYear()
     .then(function (data) {
@@ -34,18 +41,22 @@ app.get('/', function (req, res, next) {
       var previousYears = data.previous_years;
       param = data.param;
       var matchPromises = [];
+      // previousYears = ['2014'];
       previousYears.forEach(function (year) {
         matchPromises.push(getMatchListOnYear(year, param));
       });
       Q.all(matchPromises).then(function (datas) {
+        console.log(datas);
         datas.forEach(function (data) {
+          
           matches = matches.concat(data.matches);
         });
         return {matches: matches, param: data.param};
       })
      .then(function(data){  
-       getMatchesWithResults(data.matches, data.param)
+       getMatchesWithResults(existingMatches, data.matches, data.param)
        .then(function(matchesWithResult){
+         console.log("Finished!!!!!!!!!!!!!!")
          res.send(matchesWithResult)
        })
      })
@@ -53,20 +64,43 @@ app.get('/', function (req, res, next) {
 
 });
 
-function getMatchesWithResults(matches, param){
+
+function getMatchesWithResults(existingMatches, matches, param){
   var deferred = Q.defer();
   var promises = [];
-  getMatchWithResults(matches[1], param)
-  .then(function(data){deferred.resolve(data);})
-  // matches.forEach(function(match){
-  //   promises.push(getMatchWithResults(match, param))
-  // })
-  // Q.all(promises)
-  //   .then(function(matchesWithResult){
-  //     deferred.resolve(matchesWithResult);
-  //   })
+
+  // getMatchWithResults(matches[2], param)
+  // .then(function(data){deferred.resolve(data);})
+  matches.forEach(function(match){
+    if(notContains(existingMatches, match.game) == true)
+    {
+       console.log(match.game);
+      promises.push(getMatchWithResults(match, param))
+    }
+  })
+  Q.all(promises)
+    .then(function(matchesWithResult){
+      
+       console.log("After all matches");
+      var matchesWithValidResults = matchesWithResult.filter(function(m){
+         return m.groups.length > 0;
+      });
+      deferred.resolve(matchesWithValidResults);
+    })
   return deferred.promise;
 };
+
+function notContains(array_s, s)
+{
+  for(var i =0; i < array_s.length; i++)
+  {
+    if(array_s[i] == s)
+    {
+      return false;
+    }
+  }
+  return true;
+}
 
 function getMatchWithResults(match, param){
   var deferred = Q.defer();
@@ -74,11 +108,30 @@ function getMatchWithResults(match, param){
     .then(populateGroupWithResults)
     .then(function(groups){
       match.groups = groups;
-      console.log(match);
+      if(groups.length > 0)
+      {
+        write2File(match);
+      }
+      else
+      {
+        console.log("第三连未参加比赛："+ match.game);
+      }
       deferred.resolve(match);
     })
   return deferred.promise;
 };
+
+function write2File(match)
+{
+  var outputFilePath = "./data/"+ match.game + ".json";
+  fs.writeFile(outputFilePath, JSON.stringify(match, null, 2), function(err){
+    if(err){
+      console.log(err);
+    }else{
+      console.log("JSON saved to " + outputFilePath);
+    }
+  });
+}
 
 function getMatchGroupList(match, param)
 {
@@ -112,6 +165,7 @@ function getMatchGroupList(match, param)
             groups.push({value:$element.attr('value'), name:$element.text()});   
           }
         });
+        
         if(groups.length > 0)
         {
           var param1 = {};
@@ -121,6 +175,7 @@ function getMatchGroupList(match, param)
         }
         else
         {
+          console.log(tres.text);
           deferred.reject("empty group");
         }
       }
@@ -155,7 +210,10 @@ function populateGroupWithResults(config)
   });
   Q.all(subGroupPromisies)
     .then(function(groups){
-      deferred.resolve(groups);
+      var groupWithData = groups.filter(function(group){
+        return group.sub_groups.length > 0;
+      });
+      deferred.resolve(groupWithData);
     })
   return deferred.promise;
 }
@@ -171,7 +229,7 @@ function populateSubGroup(group, param)
     .send({ToolkitScriptManager1:'UpdatePanel1|DRDSub2'})
     .send({DRDType:0})
     .send({DRDSub2:groupID})
-    .send({DRDSubGroup2:'1472'})
+    .send({DRDSubGroup2:''})
     .send({__EVENTTARGET:'DRDSub2'})
     .send({__VIEWSTATE: param.view_state})
     .send({__EVENTVALIDATION: param.event_validation})
@@ -188,13 +246,18 @@ function populateSubGroup(group, param)
           var $element = $(element);
           subGroups.push({value:$element.attr('value'), name:$element.text()});   
         });
+        var param1 = {};
+        param1.view_state = parseViewStateFromHTML(tres.text);
+        param1.event_validation = parseEventValidationFromHTML(tres.text);
         var subGroupResultPromises = [];
         subGroups.forEach(function(subGroup){
-          subGroupResultPromises.push(getSubGroupResult(group, subGroup, param));
+          subGroupResultPromises.push(getSubGroupResult(group, subGroup, param1));
         })
         Q.all(subGroupResultPromises)
           .then(function(subGroups){
-            group.sub_groups = subGroups;
+            group.sub_groups = subGroups.filter(function(subGroup){
+              return subGroup.results.length > 0;
+            });
             deferred.resolve(group);       
           })
       }
@@ -260,6 +323,7 @@ function getResultList($) {
     }
     i++;
   });
+  // console.log(results);
   return results;
 };
 
@@ -310,7 +374,11 @@ function getMatchOnCurrentYear(){
       {  
         var $ = cheerio.load(tres.text);
         var matches = getMatchList($);
-        var data = {matches: matches, param: param};
+        var param1 = {};
+        param1.view_state = parseViewStateFromHTML(tres.text);
+        param1.event_validation = parseEventValidationFromHTML(tres.text);
+          
+        var data = {matches: matches, param: param1};
         deferred.resolve(data);
       }
     });
