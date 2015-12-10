@@ -1,0 +1,39 @@
+<div class="main">
+<a href="./#/"><- 返回</a>
+<div class="container">
+<table class="table table-bordered table-hover">
+   <caption>完赛历史</caption>
+   <thead>
+      <tr>
+         <th>比赛</th>
+         <th>日期</th>
+		 <th>号码</th>
+		 <th>组别</th>
+		 <th>名次</th>
+		 <th>游泳</th>
+		 <th>T1</th>
+		 <th>自行车</th>
+		 <th>T2</th>
+		 <th>跑步</th>
+		 <th>总成绩</th>
+      </tr>
+   </thead>
+   <tbody>
+      <tr ng-repeat="result in triathleteResults|orderBy:'result.date':true">
+         <td>{{result.game}}</td>
+         <td>{{result.date | date:"yyyy-MM-dd"}}</td>
+		 <td>{{result.bib}}</td>
+		 <td>{{result.sub_group}}</td>
+		 <td>{{result.rank}}</td>
+		 <td>{{result.swim}}</td>
+		 <td>{{result.t1}}</td>
+		 <td>{{result.bike}}</td>
+		 <td>{{result.t2}}</td>
+		 <td>{{result.run}}</td>
+		 <td>{{result.total}}</td>
+      </tr>
+
+   </tbody>
+</table>
+</div>
+</div>

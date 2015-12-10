@@ -32,8 +32,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // 路径解析
 app.use('/', routes);
-app.use('/matches', matches);
-app.use('/triathletes', triathletes);
+app.use('/api/matches', matches);
+app.use('/api/triathletes', triathletes);
 
 app.use(function(err, req, res, next) {
     res.status(err.status || 500);

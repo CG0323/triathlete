@@ -6,6 +6,7 @@ var superagent = require('superagent');
 var cheerio = require('cheerio');
 var Q = require('q');
 var fs = require('fs');
+var timespan = require('timespan');
 var sequelize = new Sequelize('triathlon', 'triathlon', '088583-salahdin', {host:'123.56.103.93', port: '3306', dialect: 'mysql', insecureAuth: true, charset: 'utf-8'});
 
 var TouchedID = sequelize.define('TouchedID',{
@@ -23,7 +24,10 @@ var Triathlete = sequelize.define('Triathlete', {
 	rank: {type: Sequelize.INTEGER},
 	result_count: {type: Sequelize.INTEGER},
 	photo: {type: Sequelize.STRING},
-	query_id: {type: Sequelize.INTEGER}
+	query_id: {type: Sequelize.INTEGER},
+	result_total_count:{type: Sequelize.INTEGER},
+	best_rank: {type: Sequelize.INTEGER},
+	best_total: {type: Sequelize.STRING}
 });
 
 var Match = sequelize.define('Match', {
@@ -53,33 +57,35 @@ Match.hasMany(MatchResult);
 MatchResult.belongsTo(Triathlete);
 MatchResult.belongsTo(Match);
 
-// Triathlete.sync()
-// .then(function(){
-// 	Match.sync().
-// 	then(function(){
-// 		MatchResult.sync()
-// 		.then(function(){
-// 			Match.findAll()
-// 			.then(function(matches){
-// 			//console.log(persons);
-// 			for(var i = 0; i < matches.length; i++)
-// 			{
-// 				var match = matches[i];
-// 				UpdateMatchResultsRelation(match)	
-// 			}
-// 		});
+// Triathlete.findAll()
+// 	.then(function (triathletes) {
+// 		//console.log(persons);
+// 		for (var i = 0; i < triathletes.length; i++) {
+// 			var triathlete = triathletes[i];
+// 			UpdateTriathleteResultsRelation(triathlete)
+// 		}
 // 	});
-// 	});
-	
-	
-// });
 
-// function UpdatePersonResultsRelation(person){
-// 	MatchResult.findAll({where:{triathlete_name: person.name}})
+
+// function UpdateTriathleteResultsRelation(triathlete){
+// 	MatchResult.findAll({where:{triathlete_name: triathlete.name}})
 // 				.then(function(results){					
-// 					person.setMatchResults(results);
+// 					triathlete.setMatchResults(results);
 // 				});
 // };
+
+// Match.findAll()
+// 	.then(function (matches) {
+// 		//console.log(persons);
+// 		for (var i = 0; i < matches.length; i++) {
+// 			var match = matches[i];
+// 			UpdateMatchResultsRelation(match)
+// 		}
+// 	});
+	
+	
+
+
 
 // function UpdateMatchResultsRelation(match){
 // 	MatchResult.findAll({where:{game: match.name}})
@@ -89,45 +95,45 @@ MatchResult.belongsTo(Match);
 // };
 
 
-MatchResult.sync({force:'true'})
-.then(function(){
-	var matchFiles = fs.readdirSync("./data");
-	for (var i = 0; i < matchFiles.length; i++) {
-		var matchFile = "./data/" + matchFiles[i];
-		var match = require(matchFile);
-		//Match.findOrCreate({where:{name: match.game}, defaults: {date:match.date}})
-		var groups = match.groups;
-		for (var j = 0; j < groups.length; j++) {
-			var subGroups = groups[j].sub_groups;
-			for (var k = 0; k < subGroups.length; k++) {
-				var results = subGroups[k].results;
-				for (var m = 0; m < results.length; m++) {
-					var result = results[m];
+// MatchResult.sync({force:'true'})
+// .then(function(){
+// 	var matchFiles = fs.readdirSync("./data");
+// 	for (var i = 0; i < matchFiles.length; i++) {
+// 		var matchFile = "./data/" + matchFiles[i];
+// 		var match = require(matchFile);
+// 		//Match.findOrCreate({where:{name: match.game}, defaults: {date:match.date}})
+// 		var groups = match.groups;
+// 		for (var j = 0; j < groups.length; j++) {
+// 			var subGroups = groups[j].sub_groups;
+// 			for (var k = 0; k < subGroups.length; k++) {
+// 				var results = subGroups[k].results;
+// 				for (var m = 0; m < results.length; m++) {
+// 					var result = results[m];
 
-					if(result.total.indexOf('DNS') < 0 && result.total.indexOf('DSQ') < 0)
-					{
-						MatchResult.findOrCreate({ where: { triathlete_name: result.athlete , game: match.game}, defaults:{
-						triathlete_name: results.athlete,
-						game: match.game,
-						date: match.date,
-						rank: result.rank,
-						bib: result.bib,
-						sub_group: subGroups[k].name,
-						total: result.total,
-						swim: result.swim,
-						t1: result.t1,
-						bike: result.cycling,
-						t2: result.t2,
-						run: result.run
-						} });
-					}
+// 					if(result.total.indexOf('DNS') < 0 && result.total.indexOf('DSQ') < 0)
+// 					{
+// 						MatchResult.findOrCreate({ where: { triathlete_name: result.athlete , game: match.game}, defaults:{
+// 						triathlete_name: results.athlete,
+// 						game: match.game,
+// 						date: match.date,
+// 						rank: result.rank,
+// 						bib: result.bib,
+// 						sub_group: subGroups[k].name,
+// 						total: result.total,
+// 						swim: result.swim,
+// 						t1: result.t1,
+// 						bike: result.cycling,
+// 						t2: result.t2,
+// 						run: result.run
+// 						} });
+// 					}
 					
 	
-				};
-			};
-		};
-	};	
-});
+// 				};
+// 			};
+// 		};
+// 	};	
+// });
 
 
 // TouchedID.sync()
@@ -270,3 +276,55 @@ MatchResult.sync({force:'true'})
 // });
 
 
+MatchResult.sync().then(function(){
+	Triathlete.findAll().then(function(triathletes){
+		for(var i = 0; i < triathletes.length; i++){
+			var triathlete = triathletes[i];
+			updateTriathlete(triathlete);
+		}
+	})	
+})
+
+function updateTriathlete(triathlete){
+	triathlete.getMatchResults().then(function(results){
+			triathlete.result_total_count = results.length;
+			//triathlete.best_rank = getBestRank(results);
+			triathlete.best_total = getBestTotal(results);
+			triathlete.save();
+		});
+};
+
+function getBestRank(results){
+	var bestRank = 999;
+	for(var i = 0; i < results.length; i++){
+		if(results[i].rank < bestRank){
+			bestRank = results[i].rank;
+		}
+	}
+	return bestRank;
+}
+
+function getBestTotal(results){
+	var best = {};
+	var bestDatetime = 'Jul 8, 2015 12:00:00';
+	var bestValue = Date.parse(bestDatetime);
+	var findOne = false;
+	for(var i = 0; i < results.length; i++){
+		var result = results[i];
+		if(result.sub_group.indexOf('半程') < 0 && result.sub_group.indexOf('长距离') < 0){
+			var total = result.total;
+			var str = 'Jul 8, 2015 '+total;
+			var value = Date.parse(str);
+			findOne = true;
+			if(value < bestValue){
+				bestValue = value;
+				best = total;
+			}
+		}
+	}
+	if(findOne){
+		var tmp = new Date(bestValue);
+		return tmp.getHours()+":"+tmp.getMinutes()+":"+tmp.getSeconds();
+	}	
+	return {};
+}

@@ -11,7 +11,10 @@ module.exports = function (sequelize, DataTypes){
 	rank: {type: DataTypes.INTEGER},
 	result_count: {type: DataTypes.INTEGER},
 	photo: {type: DataTypes.STRING},
-	query_id: {type: DataTypes.INTEGER}
+	query_id: {type: DataTypes.INTEGER},
+	result_total_count: {type: DataTypes.INTEGER},
+	best_rank: {type: DataTypes.INTEGER},
+	best_total: {type: DataTypes.STRING}
 	});
 };
 
