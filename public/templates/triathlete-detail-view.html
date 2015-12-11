@@ -2,7 +2,7 @@
 <a href="./#/"><- 返回</a>
 <div class="container">
 <h1>技术分析：{{triathleteResults[0].triathlete_name}}</h1>
-<canvas tc-chartjs-radar chart-options="options" chart-data="data" auto-legend></canvas>
+<canvas tc-chartjs-radar chart-options="options" chart-data="data"></canvas>
 <h1>完赛历史：{{triathleteResults[0].triathlete_name}}</h1>
 <table class="table table-bordered table-hover table-responsive">
    <thead>
@@ -21,7 +21,7 @@
       </tr>
    </thead>
    <tbody>
-      <tr ng-repeat="result in triathleteResults|orderBy:'result.date':true">
+      <tr ng-repeat="result in triathleteResults|orderBy:result.date">
          <td>{{result.game}}</td>
          <td>{{result.date | date:"yyyy-MM-dd"}}</td>
 		 <td>{{result.bib}}</td>
