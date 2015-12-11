@@ -1,8 +1,10 @@
 <div class="main">
 <a href="./#/"><- 返回</a>
 <div class="container">
-<table class="table table-bordered table-hover">
-   <caption>完赛历史</caption>
+<h1>技术分析：{{triathleteResults[0].triathlete_name}}</h1>
+<canvas tc-chartjs-radar chart-options="options" chart-data="data" auto-legend></canvas>
+<h1>完赛历史：{{triathleteResults[0].triathlete_name}}</h1>
+<table class="table table-bordered table-hover table-responsive">
    <thead>
       <tr>
          <th>比赛</th>
