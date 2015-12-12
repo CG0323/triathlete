@@ -172,7 +172,7 @@ angular.module('TriathleteApp.controllers', ['tc.chartjs'])
       console.log(best);
       strength.swim = getScore(best.swim, "01:00:00", "00:20:00");
       strength.bike = getScore(best.bike, "01:50:00", "00:58:00");
-      strength.run = getScore(best.run, "01:30:00", "00:38:00");
+      strength.run = getScore(best.run, "01:20:00", "00:38:00");
       strength.t2 = getScore(best.t2, "00:03:00", "00:00:40");
       strength.t1 = getScore(best.t1, "00:06:00", "00:00:59");
       return strength;
@@ -184,7 +184,7 @@ angular.module('TriathleteApp.controllers', ['tc.chartjs'])
 
       strength.swim = getScore(best.swim, "02:00:00", "00:40:00");
       strength.bike = getScore(best.bike, "03:40:00", "02:10:00");
-      strength.run = getScore(best.run, "03:00:00", "01:18:00");
+      strength.run = getScore(best.run, "02:40:00", "01:18:00");
       strength.t2 = getScore(best.t2, "00:03:00", "00:00:40");
       strength.t1 = getScore(best.t1, "00:06:00", "00:00:59");
       return strength;
@@ -196,7 +196,7 @@ angular.module('TriathleteApp.controllers', ['tc.chartjs'])
 
       strength.swim = getScore(best.swim, "00:30:00", "00:12:00");
       strength.bike = getScore(best.bike, "00:50:00", "00:30:00");
-      strength.run = getScore(best.run, "00:45:00", "00:18:00");
+      strength.run = getScore(best.run, "00:40:00", "00:18:00");
       strength.t2 = getScore(best.t2, "00:03:00", "00:00:40");
       strength.t1 = getScore(best.t1, "00:06:00", "00:00:59");
       return strength;
